@@ -35,7 +35,7 @@ defmodule Goth.Client do
 
     if check_metadata_scope(url_base, scope) do
       url      = "#{url_base}/token"
-      {:ok, token} = HTTPoison.get(url, headers)
+      token = Tesla.get(url, headers)
       {:ok, Token.from_response_json(scope, token.body)}
     else
       {:error, :scope_denied}
@@ -46,12 +46,11 @@ defmodule Goth.Client do
   def get_access_token(:oauth, scope) do
     endpoint = Application.get_env(:goth, :endpoint, "https://www.googleapis.com")
     url      = "#{endpoint}/oauth2/v4/token"
-    body     = {:form, [grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-                        assertion:  jwt(scope)]}
-    headers  = [{"Content-Type", "application/x-www-form-urlencoded"}]
+    body = "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=#{jwt(scope)}"
+    headers  = %{"Content-Type" => "application/x-www-form-urlencoded"}
 
-    {:ok, response} = HTTPoison.post(url, body, headers)
-    if response.status_code >= 200 && response.status_code < 300 do
+    response = Tesla.post(url, body, headers: headers)
+    if response.status >= 200 && response.status < 300 do
       {:ok, Token.from_response_json(scope, response.body)}
     else
       {:error, "Could not retrieve token, response: #{response.body}"}
@@ -91,7 +90,7 @@ defmodule Goth.Client do
   # based token requests as well.
   def check_metadata_scope(url_base, requested) do
     headers  = [{"Metadata-Flavor", "Google"}]
-    {:ok, scopes} = HTTPoison.get("#{url_base}/scopes", headers)
+    scopes = Tesla.get("#{url_base}/scopes", headers: headers)
     scopes = String.split(scopes.body, "\n")
 
     requested
@@ -107,7 +106,7 @@ defmodule Goth.Client do
     case Application.get_env(:goth, :metadata_url) do
       metadata when is_binary(metadata) ->
         url = "#{metadata}/#{endpoint}"
-        HTTPoison.get!(url, headers).body
+        Tesla.get(url, headers: headers).body
       _ -> %{}
     end
   end
